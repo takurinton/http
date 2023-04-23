@@ -153,23 +153,56 @@ impl Response {
     }
 }
 
-fn main() {
-    let listener = TcpListener::bind("0.0.0.0:65535").unwrap();
-    println!("Server listening on port 65535");
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                let mut request = Request::new();
-                request.parse(&mut stream);
-                request.log();
-                // TODO
-                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Hello</title></head><body><h1>Hello, world!</h1></body></html>".as_bytes();
-                stream.write(response).unwrap();
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-            }
+struct Server {
+    request: Request,
+    response: Response,
+}
+
+impl Server {
+    fn new() -> Server {
+        Server {
+            request: Request::new(),
+            response: Response::new(),
         }
     }
-    drop(listener);
+
+    fn run(&mut self) {
+        let listener = TcpListener::bind("0.0.0.0:65535").unwrap();
+        println!("Server listening on port 65535");
+        for stream in listener.incoming() {
+            match stream {
+                Ok(mut stream) => {
+                    // request
+                    self.request = Request::new();
+                    self.request.parse(&mut stream);
+
+                    // response
+                    self.response = Response::new();
+                    self.response.body = format!("Hello, {}", self.request.path);
+                    self.response
+                        .headers
+                        .insert(String::from("Content-Type"), String::from("text/plain"));
+                    self.response.headers.insert(
+                        String::from("Content-Length"),
+                        self.response.body.len().to_string(),
+                    );
+
+                    // write
+                    let response = self.response.format();
+                    println!("{}", response);
+                    stream.write(response.as_bytes()).unwrap();
+                    stream.flush().unwrap();
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
+        }
+        drop(listener);
+    }
+}
+
+fn main() {
+    let mut server = Server::new();
+    server.run();
 }
