@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
@@ -31,7 +31,7 @@ impl Request {
         }
     }
 
-    fn parse(&mut self, mut stream: TcpStream) {
+    fn parse(&mut self, stream: &mut TcpStream) {
         let mut buffer = [0; 1024];
         stream.read(&mut buffer).unwrap();
         let request = std::str::from_utf8(&buffer).unwrap();
@@ -128,12 +128,10 @@ fn main() {
     println!("Server listening on port 65535");
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
-                thread::spawn(move || {
-                    let mut request = Request::new();
-                    request.parse(stream);
-                    request.log();
-                });
+            Ok(mut stream) => {
+                let mut request = Request::new();
+                request.parse(&mut stream);
+                request.log();
             }
             Err(e) => {
                 println!("Error: {}", e);
