@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::thread;
 
 #[derive(Copy, Clone)]
 enum Method {
@@ -31,7 +30,7 @@ impl Request {
         }
     }
 
-    fn parse(&mut self, mut stream: TcpStream) {
+    fn parse(&mut self, stream: &mut TcpStream) {
         let mut buffer = [0; 1024];
         stream.read(&mut buffer).unwrap();
         let request = std::str::from_utf8(&buffer).unwrap();
@@ -113,7 +112,7 @@ impl Request {
     //     path
     // }
 
-    fn log(&self) {
+    fn _log(&self) {
         let method = match self.method {
             Method::GET => "GET",
         };
@@ -123,22 +122,97 @@ impl Request {
     }
 }
 
-fn main() {
-    let listener = TcpListener::bind("0.0.0.0:65535").unwrap();
-    println!("Server listening on port 65535");
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                thread::spawn(move || {
-                    let mut request = Request::new();
-                    request.parse(stream);
-                    request.log();
-                });
-            }
-            Err(e) => {
-                println!("Error: {}", e);
+struct Response {
+    status: u16,
+    headers: HashMap<String, String>,
+    body: String,
+}
+
+impl Response {
+    fn new() -> Response {
+        Response {
+            status: 200,
+            headers: HashMap::new(),
+            body: String::new(),
+        }
+    }
+
+    // TODO: もう少し丁寧に。前から順に読んでいく。
+    fn set_response(&mut self, request: &mut Request) {
+        self.body = format!("Hello, path: {}", request.path);
+        self.headers
+            .insert(String::from("Content-Type"), String::from("text/plain"));
+        self.headers
+            .insert(String::from("Content-Length"), self.body.len().to_string());
+    }
+
+    fn write(&self, stream: &mut TcpStream) {
+        let response = self.format();
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+
+    fn _log(&self) {
+        println!("Status: {}", self.status);
+        println!("Headers: {:?}", self.headers);
+        println!("Body: {}", self.body);
+    }
+
+    fn format(&self) -> String {
+        let mut s = String::new();
+        s.push_str(&format!("HTTP/1.1 {} OK\r\n", self.status));
+        // dummy
+        s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
+        s.push_str("Server: Rust Server\r\n");
+        s.push_str("Connection: close\r\n");
+        for (key, value) in &self.headers {
+            s.push_str(&format!("{}: {}\r\n", key, value));
+        }
+        s.push_str("\r\n");
+        s.push_str(&self.body);
+
+        s
+    }
+}
+
+struct Server {
+    listener: TcpListener,
+    request: Request,
+    response: Response,
+}
+
+impl Server {
+    fn new() -> Server {
+        Server {
+            listener: TcpListener::bind("0.0.0.0:65535").unwrap(),
+            request: Request::new(),
+            response: Response::new(),
+        }
+    }
+
+    fn run(&mut self) {
+        println!("Server listening on port 65535");
+        for stream in self.listener.incoming() {
+            match stream {
+                Ok(mut stream) => {
+                    // request
+                    self.request = Request::new();
+                    self.request.parse(&mut stream);
+
+                    // response
+                    self.response = Response::new();
+                    self.response.set_response(&mut self.request);
+                    self.response.write(&mut stream);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
             }
         }
     }
-    drop(listener);
+}
+
+fn main() {
+    let mut server = Server::new();
+    server.run();
 }
