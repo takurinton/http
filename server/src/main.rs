@@ -112,7 +112,7 @@ impl Request {
     //     path
     // }
 
-    fn log(&self) {
+    fn _log(&self) {
         let method = match self.method {
             Method::GET => "GET",
         };
@@ -137,9 +137,31 @@ impl Response {
         }
     }
 
+    // TODO: もう少し丁寧に。前から順に読んでいく。
+    fn set_response(&mut self, request: &mut Request) {
+        self.body = format!("Hello, path: {}", request.path);
+        self.headers
+            .insert(String::from("Content-Type"), String::from("text/plain"));
+        self.headers
+            .insert(String::from("Content-Length"), self.body.len().to_string());
+    }
+
+    fn write(&self, stream: &mut TcpStream) {
+        let response = self.format();
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+
+    fn _log(&self) {
+        println!("Status: {}", self.status);
+        println!("Headers: {:?}", self.headers);
+        println!("Body: {}", self.body);
+    }
+
     fn format(&self) -> String {
         let mut s = String::new();
         s.push_str(&format!("HTTP/1.1 {} OK\r\n", self.status));
+        // dummy
         s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
         s.push_str("Server: Rust Server\r\n");
         s.push_str("Connection: close\r\n");
@@ -154,6 +176,7 @@ impl Response {
 }
 
 struct Server {
+    listener: TcpListener,
     request: Request,
     response: Response,
 }
@@ -161,15 +184,15 @@ struct Server {
 impl Server {
     fn new() -> Server {
         Server {
+            listener: TcpListener::bind("0.0.0.0:65535").unwrap(),
             request: Request::new(),
             response: Response::new(),
         }
     }
 
     fn run(&mut self) {
-        let listener = TcpListener::bind("0.0.0.0:65535").unwrap();
         println!("Server listening on port 65535");
-        for stream in listener.incoming() {
+        for stream in self.listener.incoming() {
             match stream {
                 Ok(mut stream) => {
                     // request
@@ -178,27 +201,14 @@ impl Server {
 
                     // response
                     self.response = Response::new();
-                    self.response.body = format!("Hello, {}", self.request.path);
-                    self.response
-                        .headers
-                        .insert(String::from("Content-Type"), String::from("text/plain"));
-                    self.response.headers.insert(
-                        String::from("Content-Length"),
-                        self.response.body.len().to_string(),
-                    );
-
-                    // write
-                    let response = self.response.format();
-                    println!("{}", response);
-                    stream.write(response.as_bytes()).unwrap();
-                    stream.flush().unwrap();
+                    self.response.set_response(&mut self.request);
+                    self.response.write(&mut stream);
                 }
                 Err(e) => {
                     println!("Error: {}", e);
                 }
             }
         }
-        drop(listener);
     }
 }
 
