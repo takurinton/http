@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::thread;
 
 #[derive(Copy, Clone)]
 enum Method {
@@ -120,6 +119,37 @@ impl Request {
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
         println!("Headers: {:?}", self.headers);
+    }
+}
+
+struct Response {
+    status: u16,
+    headers: HashMap<String, String>,
+    body: String,
+}
+
+impl Response {
+    fn new() -> Response {
+        Response {
+            status: 200,
+            headers: HashMap::new(),
+            body: String::new(),
+        }
+    }
+
+    fn format(&self) -> String {
+        let mut s = String::new();
+        s.push_str(&format!("HTTP/1.1 {} OK\r\n", self.status));
+        s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
+        s.push_str("Server: Rust Server\r\n");
+        s.push_str("Connection: close\r\n");
+        for (key, value) in &self.headers {
+            s.push_str(&format!("{}: {}\r\n", key, value));
+        }
+        s.push_str("\r\n");
+        s.push_str(&self.body);
+
+        s
     }
 }
 
