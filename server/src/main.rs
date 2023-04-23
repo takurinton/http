@@ -132,6 +132,9 @@ fn main() {
                 let mut request = Request::new();
                 request.parse(&mut stream);
                 request.log();
+                // TODO
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Hello</title></head><body><h1>Hello, world!</h1></body></html>".as_bytes();
+                stream.write(response).unwrap();
             }
             Err(e) => {
                 println!("Error: {}", e);
