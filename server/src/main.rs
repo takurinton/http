@@ -5,7 +5,7 @@ use std::net::{TcpListener, TcpStream};
 #[derive(Copy, Clone)]
 enum Method {
     GET,
-    // POST,
+    POST,
     // PUT,
     // DELETE,
     // HEAD,
@@ -19,6 +19,7 @@ struct Request {
     method: Method,
     path: String,
     headers: HashMap<String, String>,
+    body: String,
 }
 
 impl Request {
@@ -27,13 +28,17 @@ impl Request {
             method: Method::GET, // TODO
             path: String::new(),
             headers: HashMap::new(),
+            body: String::new(),
         }
     }
 
     fn parse(&mut self, stream: &mut TcpStream) {
         let mut buffer = [0; 1024];
         stream.read(&mut buffer).unwrap();
-        let request = std::str::from_utf8(&buffer).unwrap();
+        let request = match std::str::from_utf8(&buffer) {
+            Ok(v) => v,
+            Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+        };
 
         let request_line_end = request.find("\r\n").unwrap();
         let request_line = &request[..request_line_end];
@@ -42,6 +47,7 @@ impl Request {
         let method = String::from(request_parts.next().unwrap());
         let method = match method.as_str() {
             "GET" => Method::GET,
+            "POST" => Method::POST,
             _ => panic!("Invalid HTTP method"),
         };
         let path = String::from(request_parts.next().unwrap());
@@ -58,6 +64,9 @@ impl Request {
             self.headers
                 .insert(String::from(header_name), String::from(header_value));
         }
+
+        let body = &request[headers_end + 4..];
+        self.body = body.to_string();
     }
 
     // fn parse(&mut self, data: TcpStream) -> Self {
@@ -115,10 +124,12 @@ impl Request {
     fn _log(&self) {
         let method = match self.method {
             Method::GET => "GET",
+            Method::POST => "POST",
         };
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
         println!("Headers: {:?}", self.headers);
+        println!("Body: {}", self.body);
     }
 }
 
