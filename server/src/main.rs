@@ -1,19 +1,61 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::num::NonZeroU16;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum Method {
     GET,
     POST,
-    // PUT,
-    // DELETE,
+    PUT,
+    DELETE,
     // HEAD,
     // CONNECT,
-    // OPTIONS,
+    OPTIONS,
     // TRACE,
-    // PATCH,
+    PATCH,
 }
+
+macro_rules! http_status {
+    (
+        $(
+            $(#[$docs:meta])*
+            ($constants:ident, $code:expr, $message:expr);
+        )+
+    ) => {
+        impl HttpStatus {
+        $(
+            $(#[$docs])*
+            const $constants: HttpStatus = HttpStatus(unsafe {
+                NonZeroU16::new_unchecked($code)
+            });
+        )+
+
+        fn get_code(&self) -> u16 {
+            self.0.get()
+        }
+
+        fn get_message(&self) -> &'static str {
+            match self.0.get() {
+                $(
+                    $code => $message,
+                )+
+                _ => panic!("Invalid HTTP status code"),
+            }
+        }
+    }
+
+    }
+}
+
+http_status! {
+    (OK, 200, "OK");
+    (CREATED, 201, "Created");
+    (NO_CONTENT, 204, "No Content");
+}
+
+#[derive(Copy, Clone, Debug)]
+struct HttpStatus(NonZeroU16);
 
 struct Request {
     method: Method,
@@ -48,6 +90,10 @@ impl Request {
         let method = match method.as_str() {
             "GET" => Method::GET,
             "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "PATCH" => Method::PATCH,
+            "DELETE" => Method::DELETE,
+            "OPTIONS" => Method::OPTIONS,
             _ => panic!("Invalid HTTP method"),
         };
         let path = String::from(request_parts.next().unwrap());
@@ -125,6 +171,10 @@ impl Request {
         let method = match self.method {
             Method::GET => "GET",
             Method::POST => "POST",
+            Method::PUT => "PUT",
+            Method::PATCH => "PATCH",
+            Method::DELETE => "DELETE",
+            Method::OPTIONS => "OPTIONS",
         };
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
@@ -134,7 +184,7 @@ impl Request {
 }
 
 struct Response {
-    status: u16,
+    status: HttpStatus,
     headers: HashMap<String, String>,
     body: String,
 }
@@ -142,7 +192,7 @@ struct Response {
 impl Response {
     fn new() -> Response {
         Response {
-            status: 200,
+            status: HttpStatus::OK,
             headers: HashMap::new(),
             body: String::new(),
         }
@@ -155,6 +205,33 @@ impl Response {
             .insert(String::from("Content-Type"), String::from("text/plain"));
         self.headers
             .insert(String::from("Content-Length"), self.body.len().to_string());
+        if request.method == Method::OPTIONS {
+            self.headers.insert(
+                String::from("Access-Control-Request-Method"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Request-Headers"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Allow-Origin"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Max-Age"),
+                String::from("86400"),
+            );
+        }
+
+        self.status = match request.method {
+            Method::GET => HttpStatus::OK,
+            Method::POST => HttpStatus::CREATED,
+            Method::PUT => HttpStatus::CREATED,
+            Method::PATCH => HttpStatus::CREATED,
+            Method::DELETE => HttpStatus::NO_CONTENT,
+            Method::OPTIONS => HttpStatus::NO_CONTENT,
+        };
     }
 
     fn write(&self, stream: &mut TcpStream) {
@@ -164,14 +241,18 @@ impl Response {
     }
 
     fn _log(&self) {
-        println!("Status: {}", self.status);
+        println!("Status: {:?}", self.status);
         println!("Headers: {:?}", self.headers);
         println!("Body: {}", self.body);
     }
 
     fn format(&self) -> String {
         let mut s = String::new();
-        s.push_str(&format!("HTTP/1.1 {} OK\r\n", self.status));
+        s.push_str(&format!(
+            "HTTP/1.1 {} {}\r\n",
+            self.status.get_code(),
+            self.status.get_message()
+        ));
         // dummy
         s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
         s.push_str("Server: Rust Server\r\n");
