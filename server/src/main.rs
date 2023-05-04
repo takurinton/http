@@ -6,13 +6,13 @@ use std::net::{TcpListener, TcpStream};
 enum Method {
     GET,
     POST,
-    // PUT,
-    // DELETE,
+    PUT,
+    DELETE,
     // HEAD,
     // CONNECT,
     // OPTIONS,
     // TRACE,
-    // PATCH,
+    PATCH,
 }
 
 struct Request {
@@ -48,6 +48,9 @@ impl Request {
         let method = match method.as_str() {
             "GET" => Method::GET,
             "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "PATCH" => Method::PATCH,
+            "DELETE" => Method::DELETE,
             _ => panic!("Invalid HTTP method"),
         };
         let path = String::from(request_parts.next().unwrap());
@@ -125,6 +128,9 @@ impl Request {
         let method = match self.method {
             Method::GET => "GET",
             Method::POST => "POST",
+            Method::PUT => "PUT",
+            Method::PATCH => "PATCH",
+            Method::DELETE => "DELETE",
         };
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
@@ -209,6 +215,7 @@ impl Server {
                     // request
                     self.request = Request::new();
                     self.request.parse(&mut stream);
+                    self.request._log();
 
                     // response
                     self.response = Response::new();
