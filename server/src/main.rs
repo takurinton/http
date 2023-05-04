@@ -224,7 +224,7 @@ impl Response {
             );
         }
 
-        let status = match request.method {
+        self.status = match request.method {
             Method::GET => HttpStatus::OK,
             Method::POST => HttpStatus::CREATED,
             Method::PUT => HttpStatus::CREATED,
@@ -232,7 +232,6 @@ impl Response {
             Method::DELETE => HttpStatus::NO_CONTENT,
             Method::OPTIONS => HttpStatus::NO_CONTENT,
         };
-        self.status = status;
     }
 
     fn write(&self, stream: &mut TcpStream) {
