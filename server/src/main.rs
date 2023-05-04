@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::num::NonZeroU16;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone)]
 enum Method {
     GET,
     POST,
@@ -10,28 +11,51 @@ enum Method {
     DELETE,
     // HEAD,
     // CONNECT,
-    OPTIONS,
+    // OPTIONS,
     // TRACE,
     PATCH,
 }
 
-enum Status {
-    Ok = 200,
-    Created = 201,
-    NoContent = 204,
-}
+macro_rules! http_status {
+    (
+        $(
+            $(#[$docs:meta])*
+            ($constants:ident, $code:expr, $message:expr);
+        )+
+    ) => {
+        impl HttpStatus {
+        $(
+            $(#[$docs])*
+            const $constants: HttpStatus = HttpStatus(unsafe {
+                NonZeroU16::new_unchecked($code)
+            });
+        )+
 
-struct HttpStatus;
+        fn get_code(&self) -> u16 {
+            self.0.get()
+        }
 
-impl HttpStatus {
-    fn get_status(status: Status) -> (u8, String) {
-        match status {
-            Status::Ok => (200, String::from("OK")),
-            Status::Created => (201, String::from("Created")),
-            Status::NoContent => (204, String::from("No Content"))
+        fn get_message(&self) -> &'static str {
+            match self.0.get() {
+                $(
+                    $code => $message,
+                )+
+                _ => panic!("Invalid HTTP status code"),
+            }
         }
     }
+
+    }
 }
+
+http_status! {
+    (OK, 200, "OK");
+    (CREATED, 201, "Created");
+    (NO_CONTENT, 204, "No Content");
+}
+
+#[derive(Copy, Clone, Debug)]
+struct HttpStatus(NonZeroU16);
 
 struct Request {
     method: Method,
@@ -69,7 +93,6 @@ impl Request {
             "PUT" => Method::PUT,
             "PATCH" => Method::PATCH,
             "DELETE" => Method::DELETE,
-            "OPTIONS" => Method::OPTIONS,
             _ => panic!("Invalid HTTP method"),
         };
         let path = String::from(request_parts.next().unwrap());
@@ -150,7 +173,6 @@ impl Request {
             Method::PUT => "PUT",
             Method::PATCH => "PATCH",
             Method::DELETE => "DELETE",
-            Method::OPTIONS => "OPTIONS",
         };
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
@@ -160,7 +182,7 @@ impl Request {
 }
 
 struct Response {
-    status: (u8, String),
+    status: HttpStatus,
     headers: HashMap<String, String>,
     body: String,
 }
@@ -168,7 +190,7 @@ struct Response {
 impl Response {
     fn new() -> Response {
         Response {
-            status: (200, String::from("OK")),
+            status: HttpStatus::OK,
             headers: HashMap::new(),
             body: String::new(),
         }
@@ -181,29 +203,15 @@ impl Response {
             .insert(String::from("Content-Type"), String::from("text/plain"));
         self.headers
             .insert(String::from("Content-Length"), self.body.len().to_string());
-        // TODO: 引数
-        if request.method == Method::OPTIONS {
-            self.headers
-                .insert(String::from("Access-Control-Request-Method"), String::from("*"));
-            self.headers
-                .insert(String::from("Access-Control-Request-Headers"), String::from("*"));
-            self.headers
-                .insert(String::from("Access-Control-Allow-Origin"), String::from("*"));
-            self.headers
-                .insert(String::from("Access-Control-Max-Age"), String::from("86400"));
-        }
 
         let status = match request.method {
-            Method::GET => Status::Ok,
-            Method::POST => Status::Created,
-            Method::PUT => Status::Created,
-            Method::PATCH => Status::Created,
-            Method::DELETE => Status::NoContent,
-            Method::OPTIONS => Status::NoContent,
+            Method::GET => HttpStatus::OK,
+            Method::POST => HttpStatus::CREATED,
+            Method::PUT => HttpStatus::CREATED,
+            Method::PATCH => HttpStatus::CREATED,
+            Method::DELETE => HttpStatus::NO_CONTENT,
         };
-
-        let http_status = HttpStatus::get_status(status);
-        self.status = http_status;
+        self.status = status;
     }
 
     fn write(&self, stream: &mut TcpStream) {
@@ -220,7 +228,11 @@ impl Response {
 
     fn format(&self) -> String {
         let mut s = String::new();
-        s.push_str(&format!("HTTP/1.1 {} {}\r\n", self.status.0, self.status.1));
+        s.push_str(&format!(
+            "HTTP/1.1 {} {}\r\n",
+            self.status.get_code(),
+            self.status.get_message()
+        ));
         // dummy
         s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
         s.push_str("Server: Rust Server\r\n");
