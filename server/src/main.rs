@@ -15,6 +15,28 @@ enum Method {
     PATCH,
 }
 
+
+#[derive(Copy, Clone, Debug)]
+enum Status {
+    Ok = 200,
+    Created = 201,
+    // ACCEPTED = 202,
+    NoContent = 204,
+    // MOVED_PERMANENTLY = 301,
+    // FOUND = 302,
+    // NOT_MODIFIED = 304,
+    // BAD_REQUEST = 400,
+    // UNAUTHORIZED = 401,
+    // FORBIDDEN = 403,
+    // NOT_FOUND = 404,
+    // METHOD_NOT_ALLOWED = 405,
+    // INTERNAL_SERVER_ERROR = 500,
+    // NOT_IMPLEMENTED = 501,
+    // BAD_GATEWAY = 502,
+    // SERVICE_UNAVAILABLE = 503,
+    // GATEWAY_TIMEOUT = 504,
+}
+
 struct Request {
     method: Method,
     path: String,
@@ -140,7 +162,7 @@ impl Request {
 }
 
 struct Response {
-    status: u16,
+    status: u8,
     headers: HashMap<String, String>,
     body: String,
 }
@@ -148,7 +170,7 @@ struct Response {
 impl Response {
     fn new() -> Response {
         Response {
-            status: 200,
+            status: Status::Ok as u8,
             headers: HashMap::new(),
             body: String::new(),
         }
@@ -161,6 +183,16 @@ impl Response {
             .insert(String::from("Content-Type"), String::from("text/plain"));
         self.headers
             .insert(String::from("Content-Length"), self.body.len().to_string());
+
+        let status = match request.method {
+            Method::GET => Status::Ok,
+            Method::POST => Status::Created,
+            Method::PUT => Status::Created,
+            Method::PATCH => Status::Created,
+            Method::DELETE => Status::NoContent,
+        };
+
+        self.status = status as u8;
     }
 
     fn write(&self, stream: &mut TcpStream) {
@@ -170,14 +202,14 @@ impl Response {
     }
 
     fn _log(&self) {
-        println!("Status: {}", self.status);
+        println!("Status: {:?}", self.status);
         println!("Headers: {:?}", self.headers);
         println!("Body: {}", self.body);
     }
 
     fn format(&self) -> String {
         let mut s = String::new();
-        s.push_str(&format!("HTTP/1.1 {} OK\r\n", self.status));
+        s.push_str(&format!("HTTP/1.1 {:?} OK\r\n", self.status));
         // dummy
         s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
         s.push_str("Server: Rust Server\r\n");
@@ -215,7 +247,6 @@ impl Server {
                     // request
                     self.request = Request::new();
                     self.request.parse(&mut stream);
-                    self.request._log();
 
                     // response
                     self.response = Response::new();
