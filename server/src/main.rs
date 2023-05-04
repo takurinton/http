@@ -15,26 +15,22 @@ enum Method {
     PATCH,
 }
 
-
-#[derive(Copy, Clone, Debug)]
 enum Status {
     Ok = 200,
     Created = 201,
-    // ACCEPTED = 202,
     NoContent = 204,
-    // MOVED_PERMANENTLY = 301,
-    // FOUND = 302,
-    // NOT_MODIFIED = 304,
-    // BAD_REQUEST = 400,
-    // UNAUTHORIZED = 401,
-    // FORBIDDEN = 403,
-    // NOT_FOUND = 404,
-    // METHOD_NOT_ALLOWED = 405,
-    // INTERNAL_SERVER_ERROR = 500,
-    // NOT_IMPLEMENTED = 501,
-    // BAD_GATEWAY = 502,
-    // SERVICE_UNAVAILABLE = 503,
-    // GATEWAY_TIMEOUT = 504,
+}
+
+struct HttpStatus;
+
+impl HttpStatus {
+    fn get_status(status: Status) -> (u8, String) {
+        match status {
+            Status::Ok => (200, String::from("OK")),
+            Status::Created => (201, String::from("Created")),
+            Status::NoContent => (204, String::from("No Content"))
+        }
+    }
 }
 
 struct Request {
@@ -162,7 +158,7 @@ impl Request {
 }
 
 struct Response {
-    status: u8,
+    status: (u8, String),
     headers: HashMap<String, String>,
     body: String,
 }
@@ -170,7 +166,7 @@ struct Response {
 impl Response {
     fn new() -> Response {
         Response {
-            status: Status::Ok as u8,
+            status: (200, String::from("OK")),
             headers: HashMap::new(),
             body: String::new(),
         }
@@ -192,7 +188,8 @@ impl Response {
             Method::DELETE => Status::NoContent,
         };
 
-        self.status = status as u8;
+        let http_status = HttpStatus::get_status(status);
+        self.status = http_status;
     }
 
     fn write(&self, stream: &mut TcpStream) {
@@ -209,7 +206,7 @@ impl Response {
 
     fn format(&self) -> String {
         let mut s = String::new();
-        s.push_str(&format!("HTTP/1.1 {:?} OK\r\n", self.status));
+        s.push_str(&format!("HTTP/1.1 {} {}\r\n", self.status.0, self.status.1));
         // dummy
         s.push_str("Date: Fri, 31 Dec 1999 23:59:59 GMT\r");
         s.push_str("Server: Rust Server\r\n");
