@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU16;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum Method {
     GET,
     POST,
@@ -11,7 +11,7 @@ enum Method {
     DELETE,
     // HEAD,
     // CONNECT,
-    // OPTIONS,
+    OPTIONS,
     // TRACE,
     PATCH,
 }
@@ -93,6 +93,7 @@ impl Request {
             "PUT" => Method::PUT,
             "PATCH" => Method::PATCH,
             "DELETE" => Method::DELETE,
+            "OPTIONS" => Method::OPTIONS,
             _ => panic!("Invalid HTTP method"),
         };
         let path = String::from(request_parts.next().unwrap());
@@ -173,6 +174,7 @@ impl Request {
             Method::PUT => "PUT",
             Method::PATCH => "PATCH",
             Method::DELETE => "DELETE",
+            Method::OPTIONS => "OPTIONS",
         };
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
@@ -203,6 +205,24 @@ impl Response {
             .insert(String::from("Content-Type"), String::from("text/plain"));
         self.headers
             .insert(String::from("Content-Length"), self.body.len().to_string());
+        if request.method == Method::OPTIONS {
+            self.headers.insert(
+                String::from("Access-Control-Request-Method"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Request-Headers"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Allow-Origin"),
+                String::from("*"),
+            );
+            self.headers.insert(
+                String::from("Access-Control-Max-Age"),
+                String::from("86400"),
+            );
+        }
 
         let status = match request.method {
             Method::GET => HttpStatus::OK,
@@ -210,6 +230,7 @@ impl Response {
             Method::PUT => HttpStatus::CREATED,
             Method::PATCH => HttpStatus::CREATED,
             Method::DELETE => HttpStatus::NO_CONTENT,
+            Method::OPTIONS => HttpStatus::NO_CONTENT,
         };
         self.status = status;
     }
