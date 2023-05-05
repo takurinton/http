@@ -8,12 +8,92 @@ enum Method {
     GET,
     POST,
     PUT,
+    PATCH,
     DELETE,
+    OPTIONS,
     // HEAD,
     // CONNECT,
-    OPTIONS,
     // TRACE,
-    PATCH,
+}
+
+impl Method {
+    fn from_str(method: &str) -> Method {
+        match method {
+            "GET" => Method::GET,
+            "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "PATCH" => Method::PATCH,
+            "DELETE" => Method::DELETE,
+            "OPTIONS" => Method::OPTIONS,
+            // "HEAD" => Method::HEAD,
+            // "CONNECT" => Method::CONNECT,
+            // "TRACE" => Method::TRACE,
+            _ => panic!("Invalid HTTP method"),
+        }
+    }
+
+    fn to_str(&self) -> &'static str {
+        match self {
+            Method::GET => "GET",
+            Method::POST => "POST",
+            Method::PUT => "PUT",
+            Method::PATCH => "PATCH",
+            Method::DELETE => "DELETE",
+            Method::OPTIONS => "OPTIONS",
+            // Method::HEAD => "HEAD",
+            // Method::CONNECT => "CONNECT",
+            // Method::TRACE => "TRACE",
+        }
+    }
+
+    fn has_body(&self) -> bool {
+        match self {
+            Method::GET => false,
+            Method::POST => true,
+            Method::PUT => true,
+            Method::PATCH => true,
+            Method::DELETE => false,
+            Method::OPTIONS => false,
+            // Method::HEAD => false,
+            // Method::CONNECT => false,
+            // Method::TRACE => false,
+        }
+    }
+
+    fn has_response_body(&self) -> bool {
+        match self {
+            Method::GET => true,
+            Method::POST => true,
+            Method::PUT => true,
+            Method::PATCH => true,
+            Method::DELETE => false,
+            Method::OPTIONS => true,
+            // Method::HEAD => false,
+            // Method::CONNECT => false,
+            // Method::TRACE => false,
+        }
+    }
+
+    fn to_status(&self) -> HttpStatus {
+        match self {
+            Method::GET => HttpStatus::OK,
+            Method::POST => HttpStatus::CREATED,
+            Method::PUT => HttpStatus::CREATED,
+            Method::PATCH => HttpStatus::CREATED,
+            Method::DELETE => HttpStatus::NO_CONTENT,
+            Method::OPTIONS => HttpStatus::OK,
+            // Method::HEAD => HttpStatus::OK,
+            // Method::CONNECT => HttpStatus::OK,
+            // Method::TRACE => HttpStatus::OK,
+        }
+    }
+
+    fn is_preflight(&self) -> bool {
+        match self {
+            Method::OPTIONS => true,
+            _ => false,
+        }
+    }
 }
 
 macro_rules! http_status {
@@ -87,15 +167,7 @@ impl Request {
         let mut request_parts = request_line.split_whitespace();
 
         let method = String::from(request_parts.next().unwrap());
-        let method = match method.as_str() {
-            "GET" => Method::GET,
-            "POST" => Method::POST,
-            "PUT" => Method::PUT,
-            "PATCH" => Method::PATCH,
-            "DELETE" => Method::DELETE,
-            "OPTIONS" => Method::OPTIONS,
-            _ => panic!("Invalid HTTP method"),
-        };
+        let method = Method::from_str(&method);
         let path = String::from(request_parts.next().unwrap());
 
         self.method = method;
@@ -115,67 +187,8 @@ impl Request {
         self.body = body.to_string();
     }
 
-    // fn parse(&mut self, data: TcpStream) -> Self {
-    //     let mut buf = [0 as u8; 1024];
-    //     let mut stream = data;
-
-    //     stream.read(&mut buf).unwrap();
-    //     let mut i = 0;
-    //     let method = Request::get_method(self, &mut i, &buf);
-    //     let path = Request::get_path(self, &mut i, &buf);
-
-    //     return Request {
-    //         method,
-    //         path,
-    //         // TODO
-    //         headers: HashMap::new(),
-    //     };
-    // }
-
-    // fn get_method(&mut self, i: &mut usize, buf: &[u8]) -> Method {
-    //     let mut index = i.clone();
-    //     let mut method = String::new();
-    //     while buf[index] != b' ' {
-    //         method.push(buf[index] as char);
-    //         index += 1;
-    //     }
-
-    //     // どこまで進めたかを書き換える
-    //     *i = index + 1;
-
-    //     let m = match method.as_str() {
-    //         "GET" => Method::GET,
-    //         _ => panic!("Invalid HTTP method"),
-    //     };
-
-    //     *i = index + 1;
-
-    //     self.method = m;
-    //     m
-    // }
-
-    // fn get_path(&mut self, i: &mut usize, buf: &[u8]) -> String {
-    //     let mut index = i.clone();
-    //     let mut path = String::new();
-
-    //     while buf[index] != b' ' {
-    //         path.push(buf[index] as char);
-    //         index += 1;
-    //     }
-
-    //     self.path = path.clone();
-    //     path
-    // }
-
     fn _log(&self) {
-        let method = match self.method {
-            Method::GET => "GET",
-            Method::POST => "POST",
-            Method::PUT => "PUT",
-            Method::PATCH => "PATCH",
-            Method::DELETE => "DELETE",
-            Method::OPTIONS => "OPTIONS",
-        };
+        let method = self.method.to_str();
         println!("Method: {:?}", method);
         println!("Path: {}", self.path);
         println!("Headers: {:?}", self.headers);
@@ -205,7 +218,7 @@ impl Response {
             .insert(String::from("Content-Type"), String::from("text/plain"));
         self.headers
             .insert(String::from("Content-Length"), self.body.len().to_string());
-        if request.method == Method::OPTIONS {
+        if Method::is_preflight(&request.method) {
             self.headers.insert(
                 String::from("Access-Control-Request-Method"),
                 String::from("*"),
@@ -224,14 +237,7 @@ impl Response {
             );
         }
 
-        self.status = match request.method {
-            Method::GET => HttpStatus::OK,
-            Method::POST => HttpStatus::CREATED,
-            Method::PUT => HttpStatus::CREATED,
-            Method::PATCH => HttpStatus::CREATED,
-            Method::DELETE => HttpStatus::NO_CONTENT,
-            Method::OPTIONS => HttpStatus::NO_CONTENT,
-        };
+        self.status = Method::to_status(&request.method);
     }
 
     fn write(&self, stream: &mut TcpStream) {
